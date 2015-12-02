@@ -1,3 +1,4 @@
+# encoding: utf-8
 # The MIT License (MIT)
 
 # Copyright (c) 2014 Dave Clark
@@ -26,8 +27,9 @@ require 'logstash/namespace'
 class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
   config_name 'sentry'
-  milestone 1
 
+  config :host, :validate => :string, :required => true, :default => 'app.getsentry.com'
+  config :use_ssl, :validate => :boolean, :required => false, :default => true
   config :key, :validate => :string, :required => true
   config :secret, :validate => :string, :required => true
   config :project_id, :validate => :string, :required => true
@@ -37,19 +39,20 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
     require 'net/https'
     require 'uri'
     
-    @url = "https://app.getsentry.com/api/#{project_id}/store/"
+    @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
     @uri = URI.parse(@url)
     @client = Net::HTTP.new(@uri.host, @uri.port)
-    @client.use_ssl = true
+    @client.use_ssl = use_ssl
     @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
-    @logger.debug("Client", :client => @client.inspect)
+    @logger.debug('Client', :client => @client.inspect)
   end
 
   public
   def receive(event)
     return unless output?(event)
 
+    require 'json'
     require 'securerandom'
 
     packet = {
@@ -62,9 +65,9 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
     packet[:platform] = 'logstash'
     packet[:server_name] = event['host']
-    packet[:extra] = event['fields'].to_hash
+    #packet[:extra] = event['fields'].to_hash
 
-    @logger.debug("Sentry packet", :sentry_packet => packet)
+    @logger.debug('Sentry packet', :sentry_packet => packet)
 
     auth_header = "Sentry sentry_version=5," +
       "sentry_client=raven_logstash/1.0," +
@@ -80,11 +83,11 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
       response = @client.request(request)
 
-      @logger.info("Sentry response", :request => request.inspect, :response => response.inspect)
+      @logger.info('Sentry response', :request => request.inspect, :response => response.inspect)
 
       raise unless response.code == '200'
     rescue Exception => e
-      @logger.warn("Unhandled exception", :request => request.inspect, :response => response.inspect, :exception => e.inspect)
+      @logger.warn('Unhandled exception', :request => request.inspect, :response => response.inspect, :exception => e.inspect)
     end
   end
 end
