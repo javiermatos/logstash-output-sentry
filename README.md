@@ -21,12 +21,12 @@ As this plugin has been shared on [RubyGems](https://rubygems.org) with the name
 bin/plugin install logstash-output-sentry
 ```
 
-When installing from official repository as suggested below, the installation path is ```/opt/logstash```.
+When installing from official repository as suggested below, the installation path is `/opt/logstash`.
 
 ### Usage
 
 [Sentry](https://getsentry.com/) is a modern error logging and aggregation platform.
-It’s important to note that Sentry should not be thought of as a log stream, but as an aggregator.
+It's important to note that Sentry should not be thought of as a log stream, but as an aggregator.
 It fits somewhere in-between a simple metrics solution (such as Graphite) and a full-on log stream aggregator (like Logstash).
 
 * In Sentry, generate and get your client key (Settings -> Client key). The client key has this form:
@@ -45,7 +45,7 @@ output {
 }
 ```
 
-* Note that all your fields (incluing the Logstash field "message") will be in the "extra" field in Sentry. But be careful : by default , the host is set to "app.getsentry.com". If you have installed Sentry on your own machine, please change the host (change "localhost:9000" with the correct value according your configuration):
+* Note that all your fields (incluing the Logstash field `message`) will be in the `extra` field in Sentry. But be careful: by default, the `host` is set to `"app.getsentry.com"`. If you have installed Sentry on your own machine, please change the `host` (change "localhost:9000" with the correct value according your configuration):
 ```ruby
 output {
   sentry {
@@ -58,7 +58,7 @@ output {
 }
 ```
 
-* You can change the "message" field (default : "Message from logstash"), or optionally specify a field to use from your event. In case the message field doesn't exist, it'll be used as the actual message.
+* You can change the `message` field (default: `"Message from logstash"`), or optionally specify a field to use from your event. In case the `message` field doesn't exist, it'll be used as the actual message.
 ```ruby
 sentry {
   'project_id' => "1"
@@ -68,7 +68,7 @@ sentry {
 }
 ```
 
-* You can indicate the level (default : "error"), and decide if all your Logstash fields will be tagged in Sentry. If you use the protocole HTTPS, please enable "use_ssl" (default : true), but if you use http you MUST disable ssl.
+* You can indicate the level (default: `"error"`), and decide if all your Logstash fields will be tagged in Sentry. If you use the protocole HTTPS, please enable `use_ssl` (default: `true`), but if you use http you MUST disable SSL.
 ```ruby
 sentry {
   'host' => "192.168.56.102:9000"
@@ -82,7 +82,7 @@ sentry {
 }
 ```
 
-* You can optionally strip the timestamp from the sentry title by do setting `strip_timestamp` to `true`, which will change `YYYY-MM-DD HH:MM:SS,MILLISEC INFO ..` to `INFO ...`
+* You can optionally strip the timestamp from the sentry title by setting `strip_timestamp` field to `true` (default: `false`), which will change `YYYY-MM-DD HH:MM:SS,MILLISEC INFO ..` to `INFO ...`
 ```ruby
 sentry {
   'host' => "192.168.56.102:9000"

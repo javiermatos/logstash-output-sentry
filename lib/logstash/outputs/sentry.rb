@@ -62,6 +62,9 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   #    }
   config :fields_to_tags, :validate => :boolean, :default => false, :required => false
 
+  # Remove timestamp from message (title) if the message starts with a timestamp
+  config :strip_timestamp, :validate => :boolean, :default => false, :required => false
+
   public
   def register
     require 'net/https'
@@ -83,10 +86,18 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
     require 'securerandom'
 
+    #use message from event if exists, if not from static
+    message_to_send = event["#{msg}"] || "#{msg}"
+    if strip_timestamp
+      #remove timestamp from message if available
+      message_matched = message_to_send.match(/\d\d\d\d\-\d\d\-\d\d\s[0-9]{1,2}\:\d\d\:\d\d,\d{1,}\s(.*)/)
+      message_to_send = message_matched ? message_matched[1] : message_to_send
+    end
+
     packet = {
       :event_id => SecureRandom.uuid.gsub('-', ''),
       :timestamp => event['@timestamp'],
-      :message => event['message'] || "#{msg}",
+      :message => message_to_send,
       :level => "#{level_tag}",
       :platform => 'logstash',
       :server_name => event['host'],
