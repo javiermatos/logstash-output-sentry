@@ -1,89 +1,104 @@
-# Logstash Plugin
+# Logstash-Output-Sentry Plugin
 
-[![Build
-Status](http://build-eu-00.elastic.co/view/LS%20Plugins/view/LS%20Outputs/job/logstash-plugin-output-example-unit/badge/icon)](http://build-eu-00.elastic.co/view/LS%20Plugins/view/LS%20Outputs/job/logstash-plugin-output-example-unit/)
+This is a plugin for [Logstash](https://github.com/elasticsearch/logstash).
 
-This is a plugin for [Logstash](https://github.com/elastic/logstash).
+This plugin gives you the possibility to send your output parsed with Logstash to a Sentry host.
 
-It is fully free and fully open source. The license is Apache 2.0, meaning you are pretty much free to use it however you want in whatever way.
+This plugin is fully free and fully open source. The license is Apache 2.0, meaning you are pretty much free to use it however you want in whatever way.
+
+But keep in mind that this is not an official plugin, and this plugin is not supported by the Logstash community.
+
 
 ## Documentation
 
-Logstash provides infrastructure to automatically generate documentation for this plugin. We use the asciidoc format to write documentation so any comments in the source code will be first converted into asciidoc and then into html. All plugin documentation are placed under one [central location](http://www.elastic.co/guide/en/logstash/current/).
+### Installation
 
-- For formatting code or config example, you can use the asciidoc `[source,ruby]` directive
-- For more asciidoc formatting tips, see the excellent reference here https://github.com/elastic/docs#asciidoc-guide
+You must have [Logstash](https://github.com/elasticsearch/logstash) installed for using this plugin. You can find instructions on how to install it on the [Logstash website](https://www.elastic.co/downloads/logstash). Maybe the easiest way to install is using their [repositories](https://www.elastic.co/guide/en/logstash/current/package-repositories.html).
 
-## Need Help?
-
-Need help? Try #logstash on freenode IRC or the https://discuss.elastic.co/c/logstash discussion forum.
-
-## Developing
-
-### 1. Plugin Developement and Testing
-
-#### Code
-- To get started, you'll need JRuby with the Bundler gem installed.
-
-- Create a new plugin or clone and existing from the GitHub [logstash-plugins](https://github.com/logstash-plugins) organization. We also provide [example plugins](https://github.com/logstash-plugins?query=example).
-
-- Install dependencies
-```sh
-bundle install
-```
-
-#### Test
-
-- Update your dependencies
+As this plugin has been shared on [RubyGems](https://rubygems.org) with the name [logstash-output-sentry](https://rubygems.org/gems/logstash-output-sentry) you can install it using the following command from your Logstash installation path:
 
 ```sh
-bundle install
+bin/plugin install logstash-output-sentry
 ```
 
-- Run tests
+When installing from official repository as suggested below, the installation path is ```/opt/logstash```.
 
-```sh
-bundle exec rspec
+### Usage
+
+[Sentry](https://getsentry.com/) is a modern error logging and aggregation platform.
+It’s important to note that Sentry should not be thought of as a log stream, but as an aggregator.
+It fits somewhere in-between a simple metrics solution (such as Graphite) and a full-on log stream aggregator (like Logstash).
+
+* In Sentry, generate and get your client key (Settings -> Client key). The client key has this form:
+```
+[http|https]://[key]:[secret]@[host]/[project_id]
 ```
 
-### 2. Running your unpublished Plugin in Logstash
-
-#### 2.1 Run in a local Logstash clone
-
-- Edit Logstash `Gemfile` and add the local plugin path, for example:
+* In your Logstash configuration file, inform your client key:
 ```ruby
-gem "logstash-filter-awesome", :path => "/your/local/logstash-filter-awesome"
+output {
+  sentry {
+    'key' => "yourkey"
+    'secret' => "yoursecretkey"
+    'project_id' => "yourprojectid"
+  }
+}
 ```
-- Install plugin
-```sh
-bin/plugin install --no-verify
-```
-- Run Logstash with your plugin
-```sh
-bin/logstash -e 'filter {awesome {}}'
-```
-At this point any modifications to the plugin code will be applied to this local Logstash setup. After modifying the plugin, simply rerun Logstash.
 
-#### 2.2 Run in an installed Logstash
-
-You can use the same **2.1** method to run your plugin in an installed Logstash by editing its `Gemfile` and pointing the `:path` to your local plugin development directory or you can build the gem and install it using:
-
-- Build your plugin gem
-```sh
-gem build logstash-filter-awesome.gemspec
+* Note that all your fields (incluing the Logstash field "message") will be in the "extra" field in Sentry. But be careful : by default , the host is set to "app.getsentry.com". If you have installed Sentry on your own machine, please change the host (change "localhost:9000" with the correct value according your configuration):
+```ruby
+output {
+  sentry {
+    'host' => "localhost:9000"
+    'use_ssl' => false
+    'project_id' => "yourprojectid"
+    'key' => "yourkey"
+    'secret' => "yoursecretkey"
+  }
+}
 ```
-- Install the plugin from the Logstash home
-```sh
-bin/plugin install /your/local/plugin/logstash-filter-awesome.gem
+
+* You can change the "message" field (default : "Message from logstash"), or optionally specify a field to use from your event. In case the message field doesn't exist, it'll be used as the actual message.
+```ruby
+sentry {
+  'project_id' => "1"
+  'key' => "87e60914d35a4394a69acc3b6d15d061"
+  'secret' => "596d005d20274474991a2fb8c33040b8"
+  'msg' => "msg_field"
+}
 ```
-- Start Logstash and proceed to test the plugin
+
+* You can indicate the level (default : "error"), and decide if all your Logstash fields will be tagged in Sentry. If you use the protocole HTTPS, please enable "use_ssl" (default : true), but if you use http you MUST disable ssl.
+```ruby
+sentry {
+  'host' => "192.168.56.102:9000"
+  'use_ssl' => false
+  'project_id' => "1"
+  'key' => "87e60914d35a4394a69acc3b6d15d061"
+  'secret' => "596d005d20274474991a2fb8c33040b8"
+  'msg' => "Message you want"
+  'level_tag' => "fatal"
+  'fields_to_tags' => true
+}
+```
+
+* You can optionally strip the timestamp from the sentry title by do setting `strip_timestamp` to `true`, which will change `YYYY-MM-DD HH:MM:SS,MILLISEC INFO ..` to `INFO ...`
+```ruby
+sentry {
+  'host' => "192.168.56.102:9000"
+  'use_ssl' => false
+  'project_id' => "1"
+  'key' => "87e60914d35a4394a69acc3b6d15d061"
+  'secret' => "596d005d20274474991a2fb8c33040b8"
+  'msg' => "Message you want"
+  'level_tag' => "fatal"
+  'fields_to_tags' => true
+  'strim_timestamp' => true
+}
+```
 
 ## Contributing
 
 All contributions are welcome: ideas, patches, documentation, bug reports, complaints, and even something you drew up on a napkin.
 
-Programming is not a required skill. Whatever you've seen about open source and maintainers or community members  saying "send patches or die" - you will not see that here.
-
-It is more important to the community that you are able to contribute.
-
-For more information about contributing, see the [CONTRIBUTING](https://github.com/elastic/logstash/blob/master/CONTRIBUTING.md) file.
+Note that this plugin has been written from [this Dave Clark's Gist](https://gist.github.com/clarkdave/edaab9be9eaa9bf1ee5f).

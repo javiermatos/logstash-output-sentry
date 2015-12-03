@@ -1,46 +1,75 @@
 # encoding: utf-8
-# The MIT License (MIT)
-
-# Copyright (c) 2014 Dave Clark
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-
 require 'logstash/outputs/base'
 require 'logstash/namespace'
+require 'json'
+
+# Sentry is a modern error logging and aggregation platform.
+# * https://getsentry.com/
+#
+# It’s important to note that Sentry should not be thought of as a log stream, but as an aggregator.
+# It fits somewhere in-between a simple metrics solution (such as Graphite) and a full-on log stream aggregator (like Logstash).
+#
+# Generate and inform your client key (Settings -> Client key)
+# The client key has this form  * https://[key]:[secret]@[host]/[project_id] *
+#
+# More informations :
+# * https://sentry.readthedocs.org/en/latest/
+
 
 class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
   config_name 'sentry'
 
-  config :host, :validate => :string, :required => true, :default => 'app.getsentry.com'
+  # Whether to use SSL (https) or not (http)
   config :use_ssl, :validate => :boolean, :required => false, :default => true
+
+  # Sentry host
+  config :host, :validate => :string, :required => true, :default => 'app.getsentry.com'
+
+  # Project id, key and secret
+  config :project_id, :validate => :string, :required => true
   config :key, :validate => :string, :required => true
   config :secret, :validate => :string, :required => true
-  config :project_id, :validate => :string, :required => true
+
+  # This sets the message value in Sentry (the title of your event)
+  config :msg, :validate => :string, :default => 'Message from logstash', :required => false
+
+  # This sets the level value in Sentry (the level tag)
+  config :level_tag, :validate => :string, :default => 'error', :required => false
+
+  # If set to true automatically map all logstash defined fields to Sentry extra fields.
+  # As an example, the logstash event:
+  # [source,ruby]
+  #    {
+  #      "@timestamp": "2013-12-10T14:36:26.151+0000",
+  #      "@version": 1,
+  #      "message": "log message",
+  #      "host": "host.domain.com",
+  #      "nested_field": {
+  #                        "key": "value"
+  #                      }
+  #    }
+  # Is mapped to this Sentry  event:
+  # [source,ruby]
+  # extra {
+  #      "@timestamp": "2013-12-10T14:36:26.151+0000",
+  #      "@version": 1,
+  #      "message": "log message",
+  #      "host": "host.domain.com",
+  #      "nested_field": {
+  #                        "key": "value"
+  #                      }
+  #    }
+  config :fields_to_tags, :validate => :boolean, :default => false, :required => false
 
   public
   def register
     require 'net/https'
     require 'uri'
-    
+
     @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
     @uri = URI.parse(@url)
+
     @client = Net::HTTP.new(@uri.host, @uri.port)
     @client.use_ssl = use_ssl
     @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
@@ -52,20 +81,21 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   def receive(event)
     return unless output?(event)
 
-    require 'json'
     require 'securerandom'
 
     packet = {
       :event_id => SecureRandom.uuid.gsub('-', ''),
       :timestamp => event['@timestamp'],
-      :message => event['message']
+      :message => event['message'] || "#{msg}",
+      :level => "#{level_tag}",
+      :platform => 'logstash',
+      :server_name => event['host'],
+      :extra => event.to_hash,
     }
 
-    packet[:level] = event['[fields][level]']
-
-    packet[:platform] = 'logstash'
-    packet[:server_name] = event['host']
-    #packet[:extra] = event['fields'].to_hash
+    if fields_to_tags
+      packet[:tags] = event.to_hash
+    end
 
     @logger.debug('Sentry packet', :sentry_packet => packet)
 
