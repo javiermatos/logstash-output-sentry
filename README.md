@@ -97,6 +97,79 @@ sentry {
 }
 ```
 
+* You can also set the project id, key, level tag, and secret in a filter to allow for a cleaner dynamic config
+```ruby
+input {
+  syslog {
+    port => 514
+    type => "syslog"
+  }
+
+  tcp {
+    port => 1514
+    type => "cisco-ios"
+  }
+
+  tcp {
+    port => 2514
+    type => "application"
+  }
+}
+filter {
+  if [type] == "syslog" {
+    mutate {
+      add_field => {
+        "[@metadata][sentry][msg]"      => "%{host}"
+        "[@metadata][sentry][severity]" => "%{severity}"
+        "[@metadata][sentry][host]"     => "192.168.1.101"
+        "[@metadata][sentry][pid]"      => "2"
+        "[@metadata][sentry][key]"      => "d3921923d34a4344878f7b83e2061229"
+        "[@metadata][sentry][secret]"   => "d0163ef306c04148aee49fe4ce7621b1"
+      }
+    }
+  }
+  else if [type] == "cisco-ios" {
+    mutate {
+      add_field => {
+        "[@metadata][sentry][msg]"      => "%{host}"
+        "[@metadata][sentry][severity]" => "%{severity}"
+        "[@metadata][sentry][host]"     => "192.168.1.101"
+        "[@metadata][sentry][pid]"      => "3"
+        "[@metadata][sentry][key]"      => "d398098q2349883e206178098"
+        "[@metadata][sentry][secret]"   => "da098d890f098d09809f6098c87e0"
+      }
+    }
+  }
+  else if [type] == "application" {
+    mutate {
+      add_field => {
+        "[@metadata][sentry][msg]"      => "%{host}"
+        "[@metadata][sentry][severity]" => "%{severity}"
+        "[@metadata][sentry][host]"     => "192.168.1.150"
+        "[@metadata][sentry][pid]"      => "4"
+        "[@metadata][sentry][key]"      => "d39dc435326d987d5678e98d76cf78098"
+        "[@metadata][sentry][secret]"   => "07d09876d543d2a345e43c4e567d"
+      }
+    }
+  }
+}
+output {
+  elasticsearch {
+    hosts          => ["192.168.1.200:9200"]
+    document_type  => "%{type}"
+  }
+  sentry {
+    fields_to_tags => true
+    host           => "%{[@metadata][sentry][host]}"
+    key            => "%{[@metadata][sentry][key]}"
+    level_tag      => "%{[@metadata][sentry][severity]}"
+    msg            => "[@metadata][sentry][msg]"
+    project_id     => "%{[@metadata][sentry][pid]}"
+    secret         => "%{[@metadata][sentry][secret]}"
+  }
+}
+```
+
 ## Contributing
 
 All contributions are welcome: ideas, patches, documentation, bug reports, complaints, and even something you drew up on a napkin.
