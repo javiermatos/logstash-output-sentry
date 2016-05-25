@@ -34,8 +34,8 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   # This sets the message value in Sentry (the title of your event)
   config :msg, :validate => :string, :default => 'Message from logstash', :required => false
 
-  # This sets the level value in Sentry (the level tag)
-  config :level_tag, :validate => :string, :default => 'error', :required => false
+  # This sets the level value in Sentry (the level tag), allow usage of event dynamic value
+  config :level_tag, :validate => :string, :default => 'error'
 
   # If set to true automatically map all logstash defined fields to Sentry extra fields.
   # As an example, the logstash event:
@@ -98,7 +98,7 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
       :event_id => SecureRandom.uuid.gsub('-', ''),
       :timestamp => event['@timestamp'],
       :message => message_to_send,
-      :level => "#{level_tag}",
+      :level => event.sprintf(@level_tag),
       :platform => 'logstash',
       :server_name => event['host'],
       :extra => event.to_hash,
