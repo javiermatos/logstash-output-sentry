@@ -67,21 +67,34 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
   public
   def register
-    require 'net/https'
-    require 'uri'
+    #I took this out becuase it fails when I try sending in the project_id or host as part of the event for a dynamic config
+    # require 'net/https'
+    # require 'uri'
 
-    @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
-    @uri = URI.parse(@url)
+    # @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
+    # @uri = URI.parse(@url)
 
-    @client = Net::HTTP.new(@uri.host, @uri.port)
-    @client.use_ssl = use_ssl
-    @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    # @client = Net::HTTP.new(@uri.host, @uri.port)
+    # @client.use_ssl = use_ssl
+    # @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
-    @logger.debug('Client', :client => @client.inspect)
+    # @logger.debug('Client', :client => @client.inspect)
   end
 
   public
   def receive(event)
+    require 'net/https'
+    require 'uri'
+
+    url = "%{proto}://#{event.sprintf(@host)}/api/#{event.sprintf(@project_id)}/store/" % { :proto => use_ssl ? 'https' : 'http' }
+    uri = URI.parse(url)
+
+    client = Net::HTTP.new(uri.host, uri.port)
+    client.use_ssl = use_ssl
+    client.verify_mode = OpenSSL::SSL::VERIFY_NONE
+
+    @logger.debug('Client', :client => client.inspect)
+
     return unless output?(event)
 
     require 'securerandom'
@@ -113,16 +126,16 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
     auth_header = "Sentry sentry_version=5," +
       "sentry_client=raven_logstash/1.0," +
       "sentry_timestamp=#{event['@timestamp'].to_i}," +
-      "sentry_key=#{@key}," +
-      "sentry_secret=#{@secret}"
+      "sentry_key=#{event.sprintf(@key)}," +
+      "sentry_secret=#{event.sprintf(@secret)}"
 
-    request = Net::HTTP::Post.new(@uri.path)
+      request = Net::HTTP::Post.new(uri.path)
 
     begin
       request.body = packet.to_json
       request.add_field('X-Sentry-Auth', auth_header)
 
-      response = @client.request(request)
+      response = client.request(request)
 
       @logger.info('Sentry response', :request => request.inspect, :response => response.inspect)
 
