@@ -1,6 +1,9 @@
 # encoding: utf-8
 require 'logstash/outputs/base'
 require 'logstash/namespace'
+require 'securerandom'
+require 'net/https'
+require 'uri'
 require 'json'
 
 # Sentry is a modern error logging and aggregation platform.
@@ -34,6 +37,10 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   # This sets the message value in Sentry (the title of your event)
   config :msg, :validate => :string, :default => 'Message from logstash', :required => false
 
+  # This sets the server_name value in Sentry (the host of your event)
+  # Order of detection: event[your_specified] -> event[host] -> "no_server_name"
+  config :server_name, :validate => :string, :default => 'host', :required => false
+
   # This sets the level value in Sentry (the level tag), allow usage of event dynamic value
   config :level_tag, :validate => :string, :default => 'error'
 
@@ -51,7 +58,7 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   #    }
   # Is mapped to this Sentry  event:
   # [source,ruby]
-  # extra {
+  # tags {
   #      "@timestamp": "2013-12-10T14:36:26.151+0000",
   #      "@version": 1,
   #      "message": "log message",
@@ -60,32 +67,50 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
   #                        "key": "value"
   #                      }
   #    }
-  config :fields_to_tags, :validate => :boolean, :default => false, :required => false
+  config :all_fields_to_tags, :validate => :boolean, :default => false, :required => false
+
+  # Fields from this array will be mapped to tags in Sentry event. It will be overwrited by 'all_fields_to_tags'
+  # As an example, the logstash event:
+  # [source,ruby]
+  #    {
+  #      "@timestamp": "2013-12-10T14:36:26.151+0000",
+  #      "@version": 1,
+  #      "message": "log message",
+  #      "host": "host.domain.com",
+  #      "nested_field": {
+  #                        "key": "value"
+  #                      }
+  #    }
+  # Is mapped to this Sentry  event with 'fields_to_tags: [nested_field]' :
+  # [source,ruby]
+  # tags {
+  #      "nested_field": {
+  #                        "key": "value"
+  #                      }
+  #    }
+  config :fields_to_tags, :validate => :array, :default => [], :required => false
 
   # Remove timestamp from message (title) if the message starts with a timestamp
   config :strip_timestamp, :validate => :boolean, :default => false, :required => false
 
+  # Optional Release attribute for Sentry event.
+  # His value will generally be something along the lines of the git SHA for the given project.
+  config :release, :validate => :string, :default => "", :required => false
+
+  # The environment name, such as ‘production’ or ‘staging’.
+  config :environment, :validate => :string, :default => "", :required => false
+
+  # Fingerprint. Sentry events will be collated by this field. Server must support version Protocol ‘7’.
+  # More info: https://docs.getsentry.com/hosted/learn/rollups/#custom-grouping
+  config :fingerprint, :validate => :array, :default => ['{{ default }}'], :required => false
+
   public
   def register
-    #I took this out becuase it fails when I try sending in the project_id or host as part of the event for a dynamic config
-    # require 'net/https'
-    # require 'uri'
-
-    # @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
-    # @uri = URI.parse(@url)
-
-    # @client = Net::HTTP.new(@uri.host, @uri.port)
-    # @client.use_ssl = use_ssl
-    # @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
-
-    # @logger.debug('Client', :client => @client.inspect)
+    @logger.info('Sentry output has been started successfully')
   end
 
   public
   def receive(event)
-    require 'net/https'
-    require 'uri'
-
     url = "%{proto}://#{event.sprintf(@host)}/api/#{event.sprintf(@project_id)}/store/" % { :proto => use_ssl ? 'https' : 'http' }
     uri = URI.parse(url)
 
@@ -97,10 +122,8 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
 
     return unless output?(event)
 
-    require 'securerandom'
-
     #use message from event if exists, if not from static
-    message_to_send = event["#{msg}"] || "#{msg}"
+    message_to_send = event["#{@msg}"] || "#{@msg}"
     if strip_timestamp
       #remove timestamp from message if available
       message_matched = message_to_send.match(/\d\d\d\d\-\d\d\-\d\d\s[0-9]{1,2}\:\d\d\:\d\d,\d{1,}\s(.*)/)
@@ -108,23 +131,40 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
     end
 
     packet = {
-      :event_id => SecureRandom.uuid.gsub('-', ''),
-      :timestamp => event['@timestamp'],
-      :message => message_to_send,
-      :level => event.sprintf(@level_tag),
-      :platform => 'logstash',
-      :server_name => event['host'],
-      :extra => event.to_hash,
+      :event_id    => SecureRandom.uuid.gsub('-', ''),
+      :timestamp   => event['@timestamp'],
+      :message     => message_to_send,
+      :level       => event.sprintf(@level_tag),
+      :platform    => 'other',
+      :sdk         => {
+        :version => "0.4.0",
+        :name    => "raven_logstash"
+      },
+      :server_name => event[@server_name] || event['host'] || "no_server_name",
+      :extra       => event.to_hash,
     }
+    packet[:release] = event.sprintf(@release) unless release.empty?
+    packet[:environment] = event.sprintf(@environment) unless environment.empty?
 
-    if fields_to_tags
+    if all_fields_to_tags
       packet[:tags] = event.to_hash
+    elsif not fields_to_tags.empty?
+      packet[:tags] = {}
+      fields_to_tags.each do |f|
+        if event.to_hash.key?(f)
+          packet[:tags][f] = event[f]
+        end
+      end
+    end
+    packet[:fingerprint] = []
+    @fingerprint.each do |fp|
+      packet[:fingerprint] << event.sprintf(fp)
     end
 
     @logger.debug('Sentry packet', :sentry_packet => packet)
 
-    auth_header = "Sentry sentry_version=5," +
-      "sentry_client=raven_logstash/1.0," +
+    auth_header = "Sentry sentry_version=7," +
+      "sentry_client=raven_logstash/0.4.0," +
       "sentry_timestamp=#{event['@timestamp'].to_i}," +
       "sentry_key=#{event.sprintf(@key)}," +
       "sentry_secret=#{event.sprintf(@secret)}"
