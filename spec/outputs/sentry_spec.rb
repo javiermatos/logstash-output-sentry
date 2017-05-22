@@ -1,22 +1,21 @@
-# encoding: utf-8
 require 'logstash/devutils/rspec/spec_helper'
 require 'logstash/outputs/sentry'
-require 'logstash/codecs/plain'
-require 'logstash/event'
 
 describe LogStash::Outputs::Sentry do
-  let(:sample_event) { LogStash::Event.new }
-  let(:output) { LogStash::Outputs::Sentry.new }
+  describe "Registration" do
+    config <<-CONFIG
+      output {
+        sentry {
+          url => "http://web:9000/api"
+          project_id => "2"
+          key => "Sheez5ohZ8Ohdiquei2E"
+          secret => "vie4eituy2aYoongeege"
+        }
+      }
+    CONFIG
 
-  before do
-    output.register
-  end
-
-  describe 'receive message' do
-    subject { output.receive(sample_event) }
-
-    it 'returns a string' do
-      expect(subject).to eq('Event received')
-    end
+    sample("...") do
+     ;
+    end 
   end
 end
