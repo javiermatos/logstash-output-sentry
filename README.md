@@ -34,70 +34,48 @@ It fits somewhere in-between a simple metrics solution (such as Graphite) and a 
 [http|https]://[key]:[secret]@[host]/[project_id]
 ```
 
-* In your Logstash configuration file, inform your client key:
+* Setup logstash to write to sentry:
 ```ruby
 output {
   sentry {
     'key' => "yourkey"
-    'secret' => "yoursecretkey"
+    'secret' => "yoursecret"
     'project_id' => "yourprojectid"
   }
 }
 ```
 
-* Note that all your fields (incluing the Logstash field `message`) will be in the `extra` field in Sentry. But be careful: by default, the `host` is set to `"app.getsentry.com"`. If you have installed Sentry on your own machine, please change the `host` (change "localhost:9000" with the correct value according your configuration):
+* By default, the plugin connects to https://app.getsentry.com/api. Set the `url` if you have installed Sentry on your own machine:
 ```ruby
 output {
   sentry {
-    'host' => "localhost:9000"
-    'use_ssl' => false
-    'project_id' => "yourprojectid"
+    'url' => "http://local.sentry:9000/api"
     'key' => "yourkey"
-    'secret' => "yoursecretkey"
+    'secret' => "yoursecret"
+    'project_id' => "yourprojectid"
   }
 }
 ```
 
-* You can change the `message` field (default: `"Message from logstash"`), or optionally specify a field to use from your event. In case the `message` field doesn't exist, it'll be used as the actual message.
+* If you don't configure anything else, the necessary fields will be set automatically, i.e., `event_id`, `timestamp` (set to `@timestamp`), `logger` (set to `"logstash"`) and `platform` (set to `"other"`). All the other fields from logstash are going to be put into the `extra` field in sentry. Additionally, the `level` is set to `"error"` and the `server_name` to the value of `host`.
+
+* The plugin can write to all the fields that the sentry interface currently supports, i.e., `timestamp`, `message`, `logger`, `platform`, `sdk`, `level`, `culprit`, `server_name`, `release`, `tags`, `environment`, `modules`, `extra`, `fingerprint`, `exception`, `sentry.interface.Message`, `stacktrace`, `template`, `breadcrumbs`, `contexts`, `request`, `threads`, `user`, `debug_meta`, `repos`, `sdk`. To set a field, you can either read the value from another field or set it to a constant value by setting the corresponding `_value`:
 ```ruby
-sentry {
-  'project_id' => "1"
-  'key' => "87e60914d35a4394a69acc3b6d15d061"
-  'secret' => "596d005d20274474991a2fb8c33040b8"
-  'msg' => "msg_field"
+output {
+  sentry {
+    'message' => "message" # sets message to the contents of the message field
+    'environment' => "[tag][Environment]" # sets message to the contents of the field Environment in tag
+    'exception' => "[@metadata][sentry][exception]" # sets exception to the metadata field, see below for a complete example
+    'user_value' => "nobody" # sets the user to the constant "nobody"
+
+    'key' => "yourkey"
+    'secret' => "yoursecret"
+    'project_id' => "yourprojectid"
+  }
 }
 ```
 
-* You can indicate the level (default: `"error"`), and decide if all your Logstash fields will be tagged in Sentry. If you use the protocole HTTPS, please enable `use_ssl` (default: `true`), but if you use http you MUST disable SSL.
-```ruby
-sentry {
-  'host' => "192.168.56.102:9000"
-  'use_ssl' => false
-  'project_id' => "1"
-  'key' => "87e60914d35a4394a69acc3b6d15d061"
-  'secret' => "596d005d20274474991a2fb8c33040b8"
-  'msg' => "Message you want"
-  'level_tag' => "fatal"
-  'fields_to_tags' => true
-}
-```
-
-* You can optionally strip the timestamp from the sentry title by setting `strip_timestamp` field to `true` (default: `false`), which will change `YYYY-MM-DD HH:MM:SS,MILLISEC INFO ..` to `INFO ...`
-```ruby
-sentry {
-  'host' => "192.168.56.102:9000"
-  'use_ssl' => false
-  'project_id' => "1"
-  'key' => "87e60914d35a4394a69acc3b6d15d061"
-  'secret' => "596d005d20274474991a2fb8c33040b8"
-  'msg' => "Message you want"
-  'level_tag' => "fatal"
-  'fields_to_tags' => true
-  'strim_timestamp' => true
-}
-```
-
-* You can also set the project id, key, level tag, and secret in a filter to allow for a cleaner dynamic config
+* You can also prepare the settings in a filter to create a cleaner config:
 ```ruby
 input {
   syslog {
@@ -154,17 +132,13 @@ filter {
   }
 }
 output {
-  elasticsearch {
-    hosts          => ["192.168.1.200:9200"]
-    document_type  => "%{type}"
-  }
   sentry {
-    fields_to_tags => true
-    host           => "%{[@metadata][sentry][host]}"
-    key            => "%{[@metadata][sentry][key]}"
-    level_tag      => "%{[@metadata][sentry][severity]}"
-    msg            => "[@metadata][sentry][msg]"
+    server_name => "[@metadata][sentry][host]"
+    level => "[@metadata][sentry][severity]"
+    message => "[@metadata][sentry][msg]"
+
     project_id     => "%{[@metadata][sentry][pid]}"
+    key            => "%{[@metadata][sentry][key]}"
     secret         => "%{[@metadata][sentry][secret]}"
   }
 }
@@ -174,4 +148,4 @@ output {
 
 All contributions are welcome: ideas, patches, documentation, bug reports, complaints, and even something you drew up on a napkin.
 
-Note that this plugin has been written from [this Dave Clark's Gist](https://gist.github.com/clarkdave/edaab9be9eaa9bf1ee5f).
+Note that this plugin has been written from [this Gist](https://gist.github.com/clarkdave/edaab9be9eaa9bf1ee5f).
