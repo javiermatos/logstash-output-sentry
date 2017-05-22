@@ -18,7 +18,7 @@ You must have [Logstash](https://github.com/elasticsearch/logstash) installed fo
 As this plugin has been shared on [RubyGems](https://rubygems.org) with the name [logstash-output-sentry](https://rubygems.org/gems/logstash-output-sentry) you can install it using the following command from your Logstash installation path:
 
 ```sh
-bin/plugin install logstash-output-sentry
+bin/logstash-plugin install logstash-output-sentry
 ```
 
 When installing from official repository as suggested below, the installation path is `/opt/logstash`.
