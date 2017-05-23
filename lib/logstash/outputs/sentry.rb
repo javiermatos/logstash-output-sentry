@@ -3,145 +3,148 @@ require 'logstash/outputs/base'
 require 'logstash/namespace'
 require 'json'
 
-# Sentry is a modern error logging and aggregation platform.
-# * https://getsentry.com/
-#
-# It’s important to note that Sentry should not be thought of as a log stream, but as an aggregator.
-# It fits somewhere in-between a simple metrics solution (such as Graphite) and a full-on log stream aggregator (like Logstash).
-#
-# Generate and inform your client key (Settings -> Client key)
-# The client key has this form  * https://[key]:[secret]@[host]/[project_id] *
-#
-# More informations :
-# * https://sentry.readthedocs.org/en/latest/
-
-
 class LogStash::Outputs::Sentry < LogStash::Outputs::Base
-
   config_name 'sentry'
+  concurrency :shared
 
-  # Whether to use SSL (https) or not (http)
-  config :use_ssl, :validate => :boolean, :required => false, :default => true
-
-  # Sentry host
-  config :host, :validate => :string, :required => true, :default => 'app.getsentry.com'
+  # Sentry API URL
+  config :url, :validate => :uri, :required => false, :default => 'https://app.getsentry.com/api'
 
   # Project id, key and secret
   config :project_id, :validate => :string, :required => true
   config :key, :validate => :string, :required => true
   config :secret, :validate => :string, :required => true
 
-  # This sets the message value in Sentry (the title of your event)
-  config :msg, :validate => :string, :default => 'Message from logstash', :required => false
+  def self.sentry_key(name, field_default=nil, value_default=nil)
+    name = name.to_s if name.is_a?(Symbol)
 
-  # This sets the level value in Sentry (the level tag), allow usage of event dynamic value
-  config :level_tag, :validate => :string, :default => 'error'
+    @sentry_keys ||= []
+    @sentry_keys << name
 
-  # If set to true automatically map all logstash defined fields to Sentry extra fields.
-  # As an example, the logstash event:
-  # [source,ruby]
-  #    {
-  #      "@timestamp": "2013-12-10T14:36:26.151+0000",
-  #      "@version": 1,
-  #      "message": "log message",
-  #      "host": "host.domain.com",
-  #      "nested_field": {
-  #                        "key": "value"
-  #                      }
-  #    }
-  # Is mapped to this Sentry  event:
-  # [source,ruby]
-  # extra {
-  #      "@timestamp": "2013-12-10T14:36:26.151+0000",
-  #      "@version": 1,
-  #      "message": "log message",
-  #      "host": "host.domain.com",
-  #      "nested_field": {
-  #                        "key": "value"
-  #                      }
-  #    }
-  config :fields_to_tags, :validate => :boolean, :default => false, :required => false
+    opts = {
+        :validate => :string,
+        :required => false,
+    }
 
-  # Remove timestamp from message (title) if the message starts with a timestamp
-  config :strip_timestamp, :validate => :boolean, :default => false, :required => false
+    config name, opts.merge(if field_default then {:default => field_default} else {} end)
+    config "#{name}_value", opts.merge(if value_default then {:default => value_default} else {} end)
+  end
+  class << self; attr_accessor :sentry_keys end
+  # https://docs.sentry.io/clientdev/attributes/
+  sentry_key :timestamp, field_default='@timestamp'
+  sentry_key :message
+  sentry_key :_logger
+  sentry_key :platform
+  sentry_key :sdk
+  sentry_key :level, value_default='error'
+  sentry_key :culprit
+  sentry_key :server_name, field_default='host'
+  sentry_key :release
+  sentry_key :tags
+  sentry_key :environment
+  sentry_key :modules
+  sentry_key :extra, field_default='' # puts all fields into extra
+  sentry_key :fingerprint
+  # https://docs.sentry.io/clientdev/interfaces/exception/
+  sentry_key :exception
+  # https://docs.sentry.io/clientdev/interfaces/message/
+  sentry_key :"sentry.interfaces.Message"
+  # https://docs.sentry.io/clientdev/interfaces/stacktrace/
+  sentry_key :stacktrace
+  # https://docs.sentry.io/clientdev/interfaces/template/
+  sentry_key :template
+  # https://docs.sentry.io/clientdev/interfaces/breadcrumbs/
+  sentry_key :breadcrumbs
+  # https://docs.sentry.io/clientdev/interfaces/contexts/
+  sentry_key :contexts
+  # https://docs.sentry.io/clientdev/interfaces/http/
+  sentry_key :request
+  # https://docs.sentry.io/clientdev/interfaces/threads/
+  sentry_key :threads
+  # https://docs.sentry.io/clientdev/interfaces/user/
+  sentry_key :user
+  # https://docs.sentry.io/clientdev/interfaces/debug/
+  sentry_key :debug_meta
+  # https://docs.sentry.io/clientdev/interfaces/repos/
+  sentry_key :repos
+  # https://docs.sentry.io/clientdev/interfaces/sdk/
+  sentry_key :sdk
 
   public
   def register
-    #I took this out becuase it fails when I try sending in the project_id or host as part of the event for a dynamic config
-    # require 'net/https'
-    # require 'uri'
-
-    # @url = "%{proto}://#{host}/api/#{project_id}/store/" % { :proto => use_ssl ? 'https' : 'http' }
-    # @uri = URI.parse(@url)
-
-    # @client = Net::HTTP.new(@uri.host, @uri.port)
-    # @client.use_ssl = use_ssl
-    # @client.verify_mode = OpenSSL::SSL::VERIFY_NONE
-
-    # @logger.debug('Client', :client => @client.inspect)
   end
 
-  public
-  def receive(event)
-    require 'net/https'
-    require 'uri'
+  def get(event, key)
+    key = key.to_s if key.is_a?(Symbol)
 
-    url = "%{proto}://#{event.sprintf(@host)}/api/#{event.sprintf(@project_id)}/store/" % { :proto => use_ssl ? 'https' : 'http' }
-    uri = URI.parse(url)
+    instance_variable_name = key.gsub(/\./, '')
 
-    client = Net::HTTP.new(uri.host, uri.port)
-    client.use_ssl = use_ssl
-    client.verify_mode = OpenSSL::SSL::VERIFY_NONE
-
-    @logger.debug('Client', :client => client.inspect)
-
-    return unless output?(event)
-
-    require 'securerandom'
-
-    #use message from event if exists, if not from static
-    message_to_send = event["#{msg}"] || "#{msg}"
-    if strip_timestamp
-      #remove timestamp from message if available
-      message_matched = message_to_send.match(/\d\d\d\d\-\d\d\-\d\d\s[0-9]{1,2}\:\d\d\:\d\d,\d{1,}\s(.*)/)
-      message_to_send = message_matched ? message_matched[1] : message_to_send
+    field = instance_variable_get("@#{instance_variable_name}")
+    if field == ''
+      ret = event.to_hash
+      ret.delete('tags')
+      return ret
+    elsif field
+      return event.get(field) if event.get(field)
     end
+
+    value = instance_variable_get("@#{instance_variable_name}_value")
+    return value # can be nil
+  end
+
+  def multi_receive(events)
+    for event in events
+      receive(event)
+    end
+  end
+
+  def create_packet(event, timestamp)
+    require 'securerandom'
+    event_id = SecureRandom.uuid.gsub('-', '')
 
     packet = {
-      :event_id => SecureRandom.uuid.gsub('-', ''),
-      :timestamp => event['@timestamp'],
-      :message => message_to_send,
-      :level => event.sprintf(@level_tag),
-      :platform => 'logstash',
-      :server_name => event['host'],
-      :extra => event.to_hash,
+      # parameters required by sentry
+      :event_id => event_id,
+      :timestamp => timestamp.to_s,
+      :logger => get(event, :_logger) || "logstash",
+      :platform => get(event, :platform) || "other",
     }
 
-    if fields_to_tags
-      packet[:tags] = event.to_hash
+    for key in LogStash::Outputs::Sentry.sentry_keys
+        sentry_key = key.gsub(/^_/,'')
+        next if packet[sentry_key];
+        value = get(event, key)
+        packet[sentry_key] = value if value
     end
 
-    @logger.debug('Sentry packet', :sentry_packet => packet)
+    return packet
+  end
 
+  def send_packet(event, packet, timestamp)
     auth_header = "Sentry sentry_version=5," +
-      "sentry_client=raven_logstash/1.0," +
-      "sentry_timestamp=#{event['@timestamp'].to_i}," +
-      "sentry_key=#{event.sprintf(@key)}," +
-      "sentry_secret=#{event.sprintf(@secret)}"
+      "sentry_client=raven_logstash/0.4.0," +
+      "sentry_timestamp=#{timestamp.to_i}," +
+      "sentry_key=#{@key}," +
+      "sentry_secret=#{@secret}"
 
-      request = Net::HTTP::Post.new(uri.path)
+    url = "#{@url}/#{@project_id}/store/"
 
+    require 'http'
+    response = HTTP.post(url, :body => packet.to_json, :headers => {:"X-Sentry-Auth" => auth_header})
+    raise "Sentry answered with #{response} and code #{response.code} to our request #{packet}" unless response.code == 200
+  end
+
+  def receive(event)
     begin
-      request.body = packet.to_json
-      request.add_field('X-Sentry-Auth', auth_header)
+      require 'time'
+      timestamp = get(event, :timestamp) || Time.now
 
-      response = client.request(request)
-
-      @logger.info('Sentry response', :request => request.inspect, :response => response.inspect)
-
-      raise unless response.code == '200'
+      sentry_packet = create_packet(event, timestamp)
+      @logger.debug('Sentry packet', :sentry_packet => sentry_packet)
+                   
+      send_packet(event, sentry_packet, timestamp)
     rescue Exception => e
-      @logger.warn('Unhandled exception', :request => request.inspect, :response => response.inspect, :exception => e.inspect)
+      @logger.warn('Unhandled exception', :exception => e)
     end
   end
 end

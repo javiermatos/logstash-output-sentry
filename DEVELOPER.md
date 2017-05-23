@@ -1,1 +1,0 @@
-# logstash-output-sentry
