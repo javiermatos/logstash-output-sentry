@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'logstash-output-sentry'
-  s.version = '0.4.1'
+  s.version = '0.4.2'
   s.licenses = ['Apache-2.0']
   s.summary = 'This output plugin sends messages to any sentry server.'
   s.description = 'This gem is a logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/logstash-plugin install logstash-output-sentry. This gem is not a stand-alone program.'
