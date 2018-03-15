@@ -124,10 +124,10 @@ class LogStash::Outputs::Sentry < LogStash::Outputs::Base
     auth_header = "Sentry sentry_version=5," +
       "sentry_client=raven_logstash/0.4.0," +
       "sentry_timestamp=#{timestamp.to_i}," +
-      "sentry_key=#{@key}," +
-      "sentry_secret=#{@secret}"
+      "sentry_key=#{event.sprintf(@key)}," +
+      "sentry_secret=#{event.sprintf(@secret)}"
 
-    url = "#{@url}/#{@project_id}/store/"
+    url = "#{event.sprintf(@url)}/#{event.sprintf(@project_id)}/store/"
 
     require 'http'
     response = HTTP.post(url, :body => packet.to_json, :headers => {:"X-Sentry-Auth" => auth_header})
