@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.2
+ - Fix string templating for key, url, secret and project_id fields
+
 ## 0.4.1
  - Fixing versions for development dependencies.
 
