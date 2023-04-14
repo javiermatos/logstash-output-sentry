@@ -29,9 +29,9 @@ When installing from official repository as suggested below, the installation pa
 It's important to note that Sentry should not be thought of as a log stream, but as an aggregator.
 It fits somewhere in-between a simple metrics solution (such as Graphite) and a full-on log stream aggregator (like Logstash).
 
-* In Sentry, generate and get your client key (Settings -> Client key). The client key has this form:
+* In Sentry, generate and get your client key (Settings -> Client Keys (DSN)). The client key has this form:
 ```
-[http|https]://[key]:[secret]@[host]/[project_id]
+[http|https]://[key]@[host]/[project_id]
 ```
 
 * Setup logstash to write to sentry:
@@ -39,7 +39,6 @@ It fits somewhere in-between a simple metrics solution (such as Graphite) and a 
 output {
   sentry {
     'key' => "yourkey"
-    'secret' => "yoursecret"
     'project_id' => "yourprojectid"
   }
 }
@@ -51,7 +50,6 @@ output {
   sentry {
     'url' => "http://local.sentry:9000/api"
     'key' => "yourkey"
-    'secret' => "yoursecret"
     'project_id' => "yourprojectid"
   }
 }
@@ -69,7 +67,6 @@ output {
     'user_value' => "nobody" # sets the user to the constant "nobody"
 
     'key' => "yourkey"
-    'secret' => "yoursecret"
     'project_id' => "yourprojectid"
   }
 }
@@ -102,7 +99,6 @@ filter {
         "[@metadata][sentry][host]"     => "192.168.1.101"
         "[@metadata][sentry][pid]"      => "2"
         "[@metadata][sentry][key]"      => "d3921923d34a4344878f7b83e2061229"
-        "[@metadata][sentry][secret]"   => "d0163ef306c04148aee49fe4ce7621b1"
       }
     }
   }
@@ -114,7 +110,6 @@ filter {
         "[@metadata][sentry][host]"     => "192.168.1.101"
         "[@metadata][sentry][pid]"      => "3"
         "[@metadata][sentry][key]"      => "d398098q2349883e206178098"
-        "[@metadata][sentry][secret]"   => "da098d890f098d09809f6098c87e0"
       }
     }
   }
@@ -126,7 +121,6 @@ filter {
         "[@metadata][sentry][host]"     => "192.168.1.150"
         "[@metadata][sentry][pid]"      => "4"
         "[@metadata][sentry][key]"      => "d39dc435326d987d5678e98d76cf78098"
-        "[@metadata][sentry][secret]"   => "07d09876d543d2a345e43c4e567d"
       }
     }
   }
@@ -139,7 +133,6 @@ output {
 
     project_id     => "%{[@metadata][sentry][pid]}"
     key            => "%{[@metadata][sentry][key]}"
-    secret         => "%{[@metadata][sentry][secret]}"
   }
 }
 ```
