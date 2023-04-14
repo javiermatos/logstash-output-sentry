@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+ - Bumped `json` and `logstash-core-plugin-api` for compatibility with logstash 8.X
+ - Removed deprecated secret option in the sentry configuration
+
 ## 0.4.2
  - Fix string templating for key, url, secret and project_id fields
 
